@@ -3,7 +3,7 @@ name: Sync Fork with Upstream
 on:
   schedule:
     - cron: '0 0 * * 1' # Every Monday at 00:00 UTC
-  workflow_dispatch: # allow manual trigger
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   sync:
@@ -19,18 +19,44 @@ jobs:
           git config --global user.name 'github-actions'
           git config --global user.email 'github-actions@github.com'
 
-      - name: Add upstream remote
+      - name: Add upstream remote and fetch
         run: |
-          git remote add upstream https://github.com/open-webui/open-webui.git
+          git remote add upstream https://github.com/gethomepage/homepage.git
           git fetch upstream
+          git remote -v
 
-      - name: Merge upstream/main into fork
+      - name: Detect default branch of fork
+        id: detect_branch
         run: |
-          git checkout main
-          git merge upstream/main || true
+          branch=$(git remote show origin | grep 'HEAD branch' | awk '{print $NF}')
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
 
-      - name: Push changes
+      - name: Checkout default branch
+        run: |
+          git checkout ${{ steps.detect_branch.outputs.branch }}
+          echo "✅ Switched to ${{ steps.detect_branch.outputs.branch }}"
+
+      - name: Log status before merge
+        run: |
+          echo "📝 Git status before merge:"
+          git status
+          echo "🔢 Recent commits:"
+          git log --oneline -n 5
+
+      - name: Merge upstream/main into fork's default branch
+        run: |
+          git merge upstream/main || echo "No changes to merge"
+          echo "✅ Merge attempt complete"
+
+      - name: Log status after merge
+        run: |
+          echo "📝 Git status after merge:"
+          git status
+          echo "🔢 Latest commits after merge:"
+          git log --oneline -n 5
+
+      - name: Push changes to fork
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} main
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }} ${{ steps.detect_branch.outputs.branch }} || echo "🔁 Nothing to push or push failed"
